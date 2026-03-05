@@ -1,19 +1,33 @@
 name: Publish
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
 
 jobs:
   publish:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: read
+      contents: write
       id-token: write
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Bump minor version
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          MAJOR=$(echo "$LATEST_TAG" | sed 's/^v//' | cut -d. -f1)
+          MINOR=$(echo "$LATEST_TAG" | sed 's/^v//' | cut -d. -f2)
+          NEW_VERSION="${MAJOR}.$((MINOR + 1)).0"
+          echo "VERSION=${NEW_VERSION}" >> "$GITHUB_ENV"
+          git tag "v${NEW_VERSION}"
+          git push origin "v${NEW_VERSION}"
+
+      - run: npm version "$VERSION" --no-git-tag-version
 
       - uses: pnpm/action-setup@v4
 
@@ -28,3 +42,15 @@ jobs:
       - run: pnpm test
 
       - run: pnpm publish --provenance --access public --no-git-checks
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 "v${VERSION}^" 2>/dev/null || echo "")
+          if [ -n "$LATEST_TAG" ]; then
+            NOTES=$(git log --pretty=format:"- %s" "${LATEST_TAG}..v${VERSION}^")
+          else
+            NOTES=$(git log --pretty=format:"- %s" "v${VERSION}^")
+          fi
+          gh release create "v${VERSION}" --notes "$NOTES"

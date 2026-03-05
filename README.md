@@ -33,15 +33,6 @@ Add a translation key to multiple locales at once.
 | `key`          | string                   | yes      | Dot-notation key, e.g. `"Users.name"`                    |
 | `translations` | `Record<string, string>` | yes      | Locale-to-value mapping, e.g. `{"nl": "Naam", "en": "Name"}` |
 
-## Setup
-
-```bash
-git clone git@github.com:Trivle/i18n-tools-mcp.git
-cd i18n-tools-mcp
-pnpm install
-pnpm build
-```
-
 ## Configuration
 
 Add to your MCP client config (e.g. `.claude/settings.json`):
@@ -50,9 +41,9 @@ Add to your MCP client config (e.g. `.claude/settings.json`):
 {
   "mcpServers": {
     "i18n-tools": {
-      "command": "node",
+      "command": "npx",
       "args": [
-        "/path/to/i18n-tools-mcp/dist/index.js",
+        "@trivle/i18n-tools-mcp",
         "/path/to/your/messages",
         "nl"
       ]
@@ -63,9 +54,8 @@ Add to your MCP client config (e.g. `.claude/settings.json`):
 
 Arguments:
 
-1. Path to the compiled server (`dist/index.js`)
-2. **Required**: Absolute path to the directory containing your `{locale}.json` files
-3. **Optional**: Base locale code (default: `nl`) — used in tool descriptions to guide AI agents
+1. **Required**: Absolute path to the directory containing your `{locale}.json` files
+2. **Optional**: Base locale code (default: `nl`) — used in tool descriptions to guide AI agents
 
 ## Development
 
