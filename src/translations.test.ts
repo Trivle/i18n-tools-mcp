@@ -346,9 +346,9 @@ describe('list', () => {
             en: { Users: { name: 'Name' }, Settings: { theme: 'dark' } },
         });
 
-        const result = list(undefined, dir);
+        const result = list(undefined, 1, 100, dir);
 
-        expect(result).toBe('Settings.theme\nUsers.name');
+        expect(result).toBe('Page 1/1 (2 keys total)\nSettings.theme\nUsers.name');
     });
 
     it('filters by prefix', () => {
@@ -356,15 +356,15 @@ describe('list', () => {
             en: { Users: { name: 'Name', email: 'Email' }, Settings: { theme: 'dark' } },
         });
 
-        const result = list('Users', dir);
+        const result = list('Users', 1, 100, dir);
 
-        expect(result).toBe('Users.email\nUsers.name');
+        expect(result).toBe('Page 1/1 (2 keys total)\nUsers.email\nUsers.name');
     });
 
     it('returns not found for non-matching prefix', () => {
         dir = createFixture({ en: { Users: { name: 'Name' } } });
 
-        const result = list('Nope', dir);
+        const result = list('Nope', 1, 100, dir);
 
         expect(result).toBe('No keys found with prefix "Nope".');
     });
@@ -375,9 +375,21 @@ describe('list', () => {
             nl: { Users: { email: 'E-mail' } },
         });
 
-        const result = list(undefined, dir);
+        const result = list(undefined, 1, 100, dir);
 
-        expect(result).toBe('Users.email\nUsers.name');
+        expect(result).toBe('Page 1/1 (2 keys total)\nUsers.email\nUsers.name');
+    });
+
+    it('paginates results', () => {
+        dir = createFixture({
+            en: { A: { a: '1', b: '2', c: '3' } },
+        });
+
+        const page1 = list(undefined, 1, 2, dir);
+        const page2 = list(undefined, 2, 2, dir);
+
+        expect(page1).toBe('Page 1/2 (3 keys total)\nA.a\nA.b');
+        expect(page2).toBe('Page 2/2 (3 keys total)\nA.c');
     });
 });
 
@@ -396,9 +408,9 @@ describe('search', () => {
             nl: { Users: { name: 'Volledige naam', email: 'E-mail' } },
         });
 
-        const result = search('Full', dir);
+        const result = search('Full', 1, 100, dir);
 
-        expect(result).toBe('en.Users.name = "Full Name"');
+        expect(result).toBe('Page 1/1 (1 results total)\nen.Users.name = "Full Name"');
     });
 
     it('is case-insensitive', () => {
@@ -406,9 +418,9 @@ describe('search', () => {
             en: { Test: { val: 'Hello World' } },
         });
 
-        const result = search('hello', dir);
+        const result = search('hello', 1, 100, dir);
 
-        expect(result).toBe('en.Test.val = "Hello World"');
+        expect(result).toBe('Page 1/1 (1 results total)\nen.Test.val = "Hello World"');
     });
 
     it('returns not found for no matches', () => {
@@ -416,7 +428,7 @@ describe('search', () => {
             en: { Users: { name: 'Name' } },
         });
 
-        const result = search('zzz', dir);
+        const result = search('zzz', 1, 100, dir);
 
         expect(result).toBe('No translations found containing "zzz".');
     });
@@ -532,9 +544,9 @@ describe('namespace mode', () => {
             en: { common: { Users: { name: 'Name' } }, auth: { login: { title: 'Login' } } },
         });
 
-        const result = list(undefined, dir);
+        const result = list(undefined, 1, 100, dir);
 
-        expect(result).toBe('auth:login.title\ncommon:Users.name');
+        expect(result).toBe('Page 1/1 (2 keys total)\nauth:login.title\ncommon:Users.name');
     });
 
     it('list filters by namespace prefix', () => {
@@ -542,9 +554,9 @@ describe('namespace mode', () => {
             en: { common: { Users: { name: 'Name' } }, auth: { login: { title: 'Login' } } },
         });
 
-        const result = list('common:', dir);
+        const result = list('common:', 1, 100, dir);
 
-        expect(result).toBe('common:Users.name');
+        expect(result).toBe('Page 1/1 (1 keys total)\ncommon:Users.name');
     });
 
     it('missing detects keys missing across namespaces', () => {
@@ -563,9 +575,9 @@ describe('namespace mode', () => {
             en: { common: { Users: { name: 'Full Name' } } },
         });
 
-        const result = search('Full', dir);
+        const result = search('Full', 1, 100, dir);
 
-        expect(result).toBe('en.common:Users.name = "Full Name"');
+        expect(result).toBe('Page 1/1 (1 results total)\nen.common:Users.name = "Full Name"');
     });
 
     it('rename with namespace prefix', () => {

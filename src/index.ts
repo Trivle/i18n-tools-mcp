@@ -133,14 +133,16 @@ server.registerTool(
 server.registerTool(
     'list',
     {
-        description: 'List all translation keys. Optionally filter by a key prefix.',
+        description: 'List all translation keys. Optionally filter by a key prefix. Results are paginated (100 keys per page).',
         inputSchema: {
             prefix: z.string().optional().describe('Key prefix to filter by, e.g. "Users" to list all keys under Users'),
+            page: z.number().optional().describe('Page number (default: 1)'),
+            pageSize: z.number().optional().describe('Number of keys per page (default: 100)'),
         },
     },
-    async ({ prefix }) => {
+    async ({ prefix, page, pageSize }) => {
         try {
-            const result = list(prefix, baseDir);
+            const result = list(prefix, page ?? 1, pageSize ?? 100, baseDir);
             return { content: [{ type: 'text', text: result }] };
         } catch (error) {
             return { content: [{ type: 'text', text: `Error: ${(error as Error).message}` }], isError: true };
@@ -151,14 +153,16 @@ server.registerTool(
 server.registerTool(
     'search',
     {
-        description: 'Search translations by value. Finds all keys where the translation contains the search term (case-insensitive).',
+        description: 'Search translations by value. Finds all keys where the translation contains the search term (case-insensitive). Results are paginated (100 results per page).',
         inputSchema: {
             value: z.string().describe('Text to search for in translation values'),
+            page: z.number().optional().describe('Page number (default: 1)'),
+            pageSize: z.number().optional().describe('Number of results per page (default: 100)'),
         },
     },
-    async ({ value }) => {
+    async ({ value, page, pageSize }) => {
         try {
-            const result = search(value, baseDir);
+            const result = search(value, page ?? 1, pageSize ?? 100, baseDir);
             return { content: [{ type: 'text', text: result }] };
         } catch (error) {
             return { content: [{ type: 'text', text: `Error: ${(error as Error).message}` }], isError: true };

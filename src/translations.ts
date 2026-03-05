@@ -367,7 +367,7 @@ export function missing(dir?: string): string {
     return results.join('\n');
 }
 
-export function list(prefix?: string, dir?: string): string {
+export function list(prefix?: string, page: number = 1, pageSize: number = 100, dir?: string): string {
     const resolvedDir = dir || DEFAULT_DIR;
     const localeFiles = discoverLocaleFiles(resolvedDir);
     const allKeys = new Set<string>();
@@ -387,10 +387,20 @@ export function list(prefix?: string, dir?: string): string {
         return prefix ? `No keys found with prefix "${prefix}".` : 'No keys found.';
     }
 
-    return keys.join('\n');
+    const totalPages = Math.ceil(keys.length / pageSize);
+    const start = (page - 1) * pageSize;
+    const pageKeys = keys.slice(start, start + pageSize);
+
+    if (pageKeys.length === 0) {
+        return `Page ${page} is out of range. Total pages: ${totalPages}`;
+    }
+
+    const header = `Page ${page}/${totalPages} (${keys.length} keys total)`;
+
+    return `${header}\n${pageKeys.join('\n')}`;
 }
 
-export function search(value: string, dir?: string): string {
+export function search(value: string, page: number = 1, pageSize: number = 100, dir?: string): string {
     const resolvedDir = dir || DEFAULT_DIR;
     const localeFiles = discoverLocaleFiles(resolvedDir);
     const results: string[] = [];
@@ -413,7 +423,17 @@ export function search(value: string, dir?: string): string {
         return `No translations found containing "${value}".`;
     }
 
-    return results.join('\n');
+    const totalPages = Math.ceil(results.length / pageSize);
+    const start = (page - 1) * pageSize;
+    const pageResults = results.slice(start, start + pageSize);
+
+    if (pageResults.length === 0) {
+        return `Page ${page} is out of range. Total pages: ${totalPages}`;
+    }
+
+    const header = `Page ${page}/${totalPages} (${results.length} results total)`;
+
+    return `${header}\n${pageResults.join('\n')}`;
 }
 
 export function move(oldKey: string, newKey: string, dir?: string): string {
