@@ -4,7 +4,7 @@
     "description": "MCP server for managing JSON translation files",
     "type": "module",
     "bin": {
-        "i18n-tools-mcp": "./dist/index.js"
+        "i18n-tools-mcp": "dist/index.js"
     },
     "files": [
         "dist",
