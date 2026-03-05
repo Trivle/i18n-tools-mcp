@@ -1,0 +1,86 @@
+#!/usr/bin/env node
+
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { z } from 'zod';
+import { query, set, add } from './translations.js';
+
+const baseDir = process.argv[2];
+if (!baseDir) {
+    console.error('Usage: i18n-tools-mcp <translations-directory>');
+    process.exit(1);
+}
+
+const baseLocale = process.argv[3] || 'nl';
+
+const server = new McpServer({
+    name: 'i18n-tools',
+    version: '0.1.0',
+});
+
+server.registerTool(
+    'query',
+    {
+        description: 'Look up a translation key across all locale files. Returns the value for each locale that has the key.',
+        inputSchema: {
+            key: z.string().describe('Dot-notation translation key, e.g. "Users.name"'),
+        },
+    },
+    async ({ key }) => {
+        try {
+            const result = query(key, baseDir);
+            return { content: [{ type: 'text', text: result }] };
+        } catch (error) {
+            return { content: [{ type: 'text', text: `Error: ${(error as Error).message}` }], isError: true };
+        }
+    },
+);
+
+server.registerTool(
+    'set',
+    {
+        description: 'Set a translation value for a single locale. Creates intermediate keys if needed.',
+        inputSchema: {
+            locale: z.string().describe(`Locale code, e.g. "${baseLocale}" or "en"`),
+            key: z.string().describe('Dot-notation translation key, e.g. "Users.name"'),
+            value: z.string().describe('The translation value to set'),
+        },
+    },
+    async ({ locale, key, value }) => {
+        try {
+            const result = set(locale, key, value, baseDir);
+            return { content: [{ type: 'text', text: result }] };
+        } catch (error) {
+            return { content: [{ type: 'text', text: `Error: ${(error as Error).message}` }], isError: true };
+        }
+    },
+);
+
+server.registerTool(
+    'add',
+    {
+        description: `Add a translation key to multiple locales at once. Always include at least the base locale "${baseLocale}". Other locales are optional and will be filled by the AI translation pipeline.`,
+        inputSchema: {
+            key: z.string().describe('Dot-notation translation key, e.g. "Users.name"'),
+            translations: z.record(z.string(), z.string()).describe(`Object mapping locale codes to translation values. Always include "${baseLocale}" as the base locale. Example: {"${baseLocale}": "Naam", "en": "Name"}`),
+        },
+    },
+    async ({ key, translations }) => {
+        try {
+            const result = add(key, translations, baseDir);
+            return { content: [{ type: 'text', text: result }] };
+        } catch (error) {
+            return { content: [{ type: 'text', text: `Error: ${(error as Error).message}` }], isError: true };
+        }
+    },
+);
+
+async function main(): Promise<void> {
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+}
+
+main().catch((error) => {
+    console.error('Fatal error:', error);
+    process.exit(1);
+});
