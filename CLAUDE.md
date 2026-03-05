@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-MCP server that exposes three tools (`query`, `set`, `add`) for reading and writing JSON translation files. Built with the official `@modelcontextprotocol/sdk` and stdio transport. Translation keys use dot-notation (e.g. `Users.name`). The server auto-discovers `{locale}.json` files in the configured directory.
+MCP server that exposes tools (`query`, `set`, `add`, `delete`, `rename`, `move`, `list`, `search`, `missing`) for reading and writing JSON translation files. Built with the official `@modelcontextprotocol/sdk` and stdio transport.
+
+Supports two directory layouts (auto-detected):
+- **Flat**: `{locale}.json` files in a single directory
+- **Namespaced**: `{locale}/{namespace}.json` (i18next-style), keys prefixed with `namespace:`
 
 ## Commands
 

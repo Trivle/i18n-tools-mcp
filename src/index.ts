@@ -3,15 +3,17 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { query, set, add } from './translations.js';
+import { query, set, add, remove, rename, missing, list, search, move, setIndent } from './translations.js';
 
 const baseDir = process.argv[2];
 if (!baseDir) {
-    console.error('Usage: i18n-tools-mcp <translations-directory>');
+    console.error('Usage: i18n-tools-mcp <translations-directory> [base-locale] [indent]');
     process.exit(1);
 }
 
 const baseLocale = process.argv[3] || 'nl';
+const indent = parseInt(process.argv[4] || '4', 10);
+setIndent(indent);
 
 const server = new McpServer({
     name: 'i18n-tools',
@@ -68,6 +70,114 @@ server.registerTool(
     async ({ key, translations }) => {
         try {
             const result = add(key, translations, baseDir);
+            return { content: [{ type: 'text', text: result }] };
+        } catch (error) {
+            return { content: [{ type: 'text', text: `Error: ${(error as Error).message}` }], isError: true };
+        }
+    },
+);
+
+server.registerTool(
+    'delete',
+    {
+        description: 'Delete a translation key from all locale files.',
+        inputSchema: {
+            key: z.string().describe('Dot-notation translation key, e.g. "Users.name"'),
+        },
+    },
+    async ({ key }) => {
+        try {
+            const result = remove(key, baseDir);
+            return { content: [{ type: 'text', text: result }] };
+        } catch (error) {
+            return { content: [{ type: 'text', text: `Error: ${(error as Error).message}` }], isError: true };
+        }
+    },
+);
+
+server.registerTool(
+    'rename',
+    {
+        description: 'Rename a translation key across all locale files. Preserves values.',
+        inputSchema: {
+            oldKey: z.string().describe('Current dot-notation key, e.g. "Users.name"'),
+            newKey: z.string().describe('New dot-notation key, e.g. "Users.fullName"'),
+        },
+    },
+    async ({ oldKey, newKey }) => {
+        try {
+            const result = rename(oldKey, newKey, baseDir);
+            return { content: [{ type: 'text', text: result }] };
+        } catch (error) {
+            return { content: [{ type: 'text', text: `Error: ${(error as Error).message}` }], isError: true };
+        }
+    },
+);
+
+server.registerTool(
+    'missing',
+    {
+        description: 'Find translation keys that exist in some locales but are missing in others.',
+        inputSchema: {},
+    },
+    async () => {
+        try {
+            const result = missing(baseDir);
+            return { content: [{ type: 'text', text: result }] };
+        } catch (error) {
+            return { content: [{ type: 'text', text: `Error: ${(error as Error).message}` }], isError: true };
+        }
+    },
+);
+
+server.registerTool(
+    'list',
+    {
+        description: 'List all translation keys. Optionally filter by a key prefix.',
+        inputSchema: {
+            prefix: z.string().optional().describe('Key prefix to filter by, e.g. "Users" to list all keys under Users'),
+        },
+    },
+    async ({ prefix }) => {
+        try {
+            const result = list(prefix, baseDir);
+            return { content: [{ type: 'text', text: result }] };
+        } catch (error) {
+            return { content: [{ type: 'text', text: `Error: ${(error as Error).message}` }], isError: true };
+        }
+    },
+);
+
+server.registerTool(
+    'search',
+    {
+        description: 'Search translations by value. Finds all keys where the translation contains the search term (case-insensitive).',
+        inputSchema: {
+            value: z.string().describe('Text to search for in translation values'),
+        },
+    },
+    async ({ value }) => {
+        try {
+            const result = search(value, baseDir);
+            return { content: [{ type: 'text', text: result }] };
+        } catch (error) {
+            return { content: [{ type: 'text', text: `Error: ${(error as Error).message}` }], isError: true };
+        }
+    },
+);
+
+server.registerTool(
+    'move',
+    {
+        description: 'Move a translation key to a different path across all locale files. Same as rename.',
+        inputSchema: {
+            oldKey: z.string().describe('Current dot-notation key, e.g. "Users.name"'),
+            newKey: z.string().describe('New dot-notation key, e.g. "Profile.name"'),
+        },
+    },
+    async ({ oldKey, newKey }) => {
+        try {
+            const result = move(oldKey, newKey, baseDir);
             return { content: [{ type: 'text', text: result }] };
         } catch (error) {
             return { content: [{ type: 'text', text: `Error: ${(error as Error).message}` }], isError: true };

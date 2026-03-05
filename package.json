@@ -1,6 +1,6 @@
 {
     "name": "@trivle/i18n-tools-mcp",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "description": "MCP server for managing JSON translation files",
     "type": "module",
     "bin": {
@@ -17,6 +17,18 @@
         "test:watch": "vitest",
         "prepublishOnly": "pnpm build"
     },
+    "keywords": [
+        "mcp",
+        "i18n",
+        "translations",
+        "internationalization",
+        "i18next",
+        "react-i18next",
+        "next-i18next",
+        "json",
+        "locale",
+        "model-context-protocol"
+    ],
     "repository": {
         "type": "git",
         "url": "https://github.com/Trivle/i18n-tools-mcp"
