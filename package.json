@@ -17,6 +17,10 @@
         "test:watch": "vitest",
         "prepublishOnly": "pnpm build"
     },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/Trivle/i18n-tools-mcp"
+    },
     "packageManager": "pnpm@10.30.3",
     "dependencies": {
         "@modelcontextprotocol/sdk": "^1.12.1",
