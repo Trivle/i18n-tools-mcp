@@ -130,6 +130,26 @@ Search translations by value (case-insensitive).
 
 Find translation keys that exist in some locales but are missing in others. Takes no parameters.
 
+### `batch`
+
+Apply multiple mutations in a single call. Each affected locale file is read once, mutated in memory, and written exactly once — regardless of how many ops touch it. Per-file atomic: if any op fails, no files are written.
+
+Prefer this over repeated `set`/`add`/`delete`/`rename`/`move` calls for bulk changes. It minimizes file-watcher churn (Next.js dev, Vite HMR) and avoids partial writes.
+
+| Parameter | Type      | Required | Description                                  |
+|-----------|-----------|----------|----------------------------------------------|
+| `ops`     | `BatchOp[]` | yes    | Ordered list of operations (see below)       |
+
+Each op is one of:
+
+```jsonc
+{ "op": "set",    "locale": "en", "key": "Users.name", "value": "Name" }
+{ "op": "add",    "key": "Users.email", "translations": { "nl": "E-mail", "en": "Email" } }
+{ "op": "delete", "key": "Users.legacy" }
+{ "op": "rename", "oldKey": "Users.name", "newKey": "Users.fullName" }
+{ "op": "move",   "oldKey": "Users.name", "newKey": "Profile.name" }
+```
+
 ## Development
 
 ```bash

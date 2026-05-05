@@ -439,3 +439,133 @@ export function search(value: string, page: number = 1, pageSize: number = 100, 
 export function move(oldKey: string, newKey: string, dir?: string): string {
     return rename(oldKey, newKey, dir).replace('Renamed', 'Moved');
 }
+
+export type BatchOp =
+    | { op: 'set'; locale: string; key: string; value: string }
+    | { op: 'add'; key: string; translations: Record<string, string> }
+    | { op: 'delete'; key: string }
+    | { op: 'rename'; oldKey: string; newKey: string }
+    | { op: 'move'; oldKey: string; newKey: string };
+
+export function batch(ops: BatchOp[], dir?: string): string {
+    const resolvedDir = dir || DEFAULT_DIR;
+    const localeFiles = discoverLocaleFiles(resolvedDir);
+    const cache = new Map<string, Record<string, unknown>>();
+    const dirty = new Set<string>();
+
+    const load = (file: LocaleFile): Record<string, unknown> => {
+        if (!cache.has(file.path)) {
+            cache.set(file.path, readJson(file.path));
+        }
+        return cache.get(file.path)!;
+    };
+
+    const summary: string[] = [];
+
+    for (let i = 0; i < ops.length; i++) {
+        const op = ops[i];
+
+        try {
+            switch (op.op) {
+                case 'set': {
+                    const { namespace, dotKey } = parseKey(op.key);
+                    if (isNamespaced(localeFiles) && !namespace) {
+                        throw new Error(`Namespace required in namespace mode. Use "namespace:${op.key}" format.`);
+                    }
+                    const file = findLocaleFile(localeFiles, op.locale, namespace);
+                    if (!file) {
+                        const target = namespace ? `${op.locale}/${namespace}` : op.locale;
+                        throw new Error(`Locale "${target}" not found in ${resolvedDir}`);
+                    }
+                    setNestedValue(load(file), dotKey, sanitize(op.value));
+                    dirty.add(file.path);
+                    summary.push(`set ${op.locale}.${op.key}`);
+                    break;
+                }
+
+                case 'add': {
+                    const { namespace, dotKey } = parseKey(op.key);
+                    if (isNamespaced(localeFiles) && !namespace) {
+                        throw new Error(`Namespace required in namespace mode. Use "namespace:${op.key}" format.`);
+                    }
+                    const updated: string[] = [];
+                    const skipped: string[] = [];
+                    for (const [locale, value] of Object.entries(op.translations)) {
+                        const file = findLocaleFile(localeFiles, locale, namespace);
+                        if (!file) {
+                            skipped.push(locale);
+                            continue;
+                        }
+                        setNestedValue(load(file), dotKey, sanitize(value));
+                        dirty.add(file.path);
+                        updated.push(locale);
+                    }
+                    if (updated.length === 0) {
+                        throw new Error(`No locales updated for "${op.key}"`);
+                    }
+                    const skipNote = skipped.length > 0 ? ` (skipped: ${skipped.join(', ')})` : '';
+                    summary.push(`add ${op.key} → ${updated.join(', ')}${skipNote}`);
+                    break;
+                }
+
+                case 'delete': {
+                    const { namespace, dotKey } = parseKey(op.key);
+                    const filesToSearch = filterFiles(localeFiles, namespace);
+                    const deleted: string[] = [];
+                    for (const file of filesToSearch) {
+                        const data = load(file);
+                        if (deleteNestedValue(data, dotKey)) {
+                            dirty.add(file.path);
+                            deleted.push(file.locale);
+                        }
+                    }
+                    summary.push(deleted.length > 0
+                        ? `delete ${op.key} → ${deleted.join(', ')}`
+                        : `delete ${op.key} → not found`);
+                    break;
+                }
+
+                case 'rename':
+                case 'move': {
+                    const { namespace: oldNs, dotKey: oldDotKey } = parseKey(op.oldKey);
+                    const { dotKey: newDotKey } = parseKey(op.newKey);
+                    const filesToSearch = filterFiles(localeFiles, oldNs);
+                    const renamed: string[] = [];
+                    for (const file of filesToSearch) {
+                        const data = load(file);
+                        const value = getNestedValue(data, oldDotKey);
+                        if (value === undefined) continue;
+
+                        deleteNestedValue(data, oldDotKey);
+
+                        if (typeof value === 'object' && value !== null) {
+                            const subKeys = collectKeys(value as Record<string, unknown>);
+                            for (const subKey of subKeys) {
+                                const subValue = getNestedValue(value as Record<string, unknown>, subKey);
+                                setNestedValue(data, `${newDotKey}.${subKey}`, subValue as string);
+                            }
+                        } else {
+                            setNestedValue(data, newDotKey, value as string);
+                        }
+
+                        dirty.add(file.path);
+                        renamed.push(file.locale);
+                    }
+                    summary.push(renamed.length > 0
+                        ? `${op.op} ${op.oldKey} → ${op.newKey} (${renamed.join(', ')})`
+                        : `${op.op} ${op.oldKey} → not found`);
+                    break;
+                }
+            }
+        } catch (error) {
+            throw new Error(`Op #${i + 1} (${op.op}) failed: ${(error as Error).message}. No files written.`);
+        }
+    }
+
+    for (const path of dirty) {
+        writeJson(path, cache.get(path)!);
+    }
+
+    const header = `Batch: ${ops.length} op(s), ${dirty.size} file(s) written`;
+    return [header, ...summary].join('\n');
+}

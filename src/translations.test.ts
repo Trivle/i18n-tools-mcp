@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { query, set, add, remove, rename, missing, list, search, move } from './translations.js';
+import { query, set, add, remove, rename, missing, list, search, move, batch } from './translations.js';
 
 function createFixture(locales: Record<string, Record<string, unknown>>): string {
     const dir = mkdtempSync(join(tmpdir(), 'i18n-test-'));
@@ -590,5 +590,86 @@ describe('namespace mode', () => {
 
         expect(result).toBe('Renamed "common:Users.name" to "common:Users.fullName" in 2 locale(s): en, nl');
         expect(readNamespacedLocale(dir, 'en', 'common')).toEqual({ Users: { fullName: 'Name' } });
+    });
+});
+
+describe('batch', () => {
+    let dir: string;
+
+    afterEach(() => {
+        if (dir) {
+            rmSync(dir, { recursive: true });
+        }
+    });
+
+    it('applies multiple ops and writes each file once', () => {
+        dir = createFixture({
+            en: { Users: { name: 'Name' } },
+            nl: { Users: { name: 'Naam' } },
+        });
+
+        const result = batch([
+            { op: 'set', locale: 'en', key: 'Users.email', value: 'Email' },
+            { op: 'set', locale: 'en', key: 'Users.phone', value: 'Phone' },
+            { op: 'add', key: 'Users.address', translations: { en: 'Address', nl: 'Adres' } },
+            { op: 'delete', key: 'Users.name' },
+        ], dir);
+
+        expect(result).toContain('Batch: 4 op(s), 2 file(s) written');
+        expect(readLocale(dir, 'en')).toEqual({
+            Users: { email: 'Email', phone: 'Phone', address: 'Address' },
+        });
+        expect(readLocale(dir, 'nl')).toEqual({
+            Users: { address: 'Adres' },
+        });
+    });
+
+    it('does not write any files when an op fails', () => {
+        dir = createFixture({
+            en: { Users: { name: 'Name' } },
+            nl: { Users: { name: 'Naam' } },
+        });
+
+        expect(() =>
+            batch([
+                { op: 'set', locale: 'en', key: 'Users.name', value: 'NewName' },
+                { op: 'set', locale: 'fr', key: 'Users.name', value: 'Nom' },
+            ], dir),
+        ).toThrow(/Op #2.*not found.*No files written/);
+
+        expect(readLocale(dir, 'en')).toEqual({ Users: { name: 'Name' } });
+    });
+
+    it('rename and set on same file collapse to one write', () => {
+        dir = createFixture({
+            en: { Users: { name: 'Name' } },
+        });
+
+        const result = batch([
+            { op: 'rename', oldKey: 'Users.name', newKey: 'Users.fullName' },
+            { op: 'set', locale: 'en', key: 'Users.email', value: 'Email' },
+        ], dir);
+
+        expect(result).toContain('1 file(s) written');
+        expect(readLocale(dir, 'en')).toEqual({
+            Users: { fullName: 'Name', email: 'Email' },
+        });
+    });
+
+    it('works with namespaced layout', () => {
+        dir = createNamespacedFixture({
+            en: { common: { Users: { name: 'Name' } } },
+            nl: { common: { Users: { name: 'Naam' } } },
+        });
+
+        const result = batch([
+            { op: 'add', key: 'common:Users.email', translations: { en: 'Email', nl: 'E-mail' } },
+            { op: 'rename', oldKey: 'common:Users.name', newKey: 'common:Users.fullName' },
+        ], dir);
+
+        expect(result).toContain('2 file(s) written');
+        expect(readNamespacedLocale(dir, 'en', 'common')).toEqual({
+            Users: { fullName: 'Name', email: 'Email' },
+        });
     });
 });

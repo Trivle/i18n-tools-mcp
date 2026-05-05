@@ -3,7 +3,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { query, set, add, remove, rename, missing, list, search, move, setIndent } from './translations.js';
+import { query, set, add, remove, rename, missing, list, search, move, batch, setIndent, type BatchOp } from './translations.js';
 
 const baseDir = process.argv[2];
 if (!baseDir) {
@@ -182,6 +182,52 @@ server.registerTool(
     async ({ oldKey, newKey }) => {
         try {
             const result = move(oldKey, newKey, baseDir);
+            return { content: [{ type: 'text', text: result }] };
+        } catch (error) {
+            return { content: [{ type: 'text', text: `Error: ${(error as Error).message}` }], isError: true };
+        }
+    },
+);
+
+const batchOpSchema = z.discriminatedUnion('op', [
+    z.object({
+        op: z.literal('set'),
+        locale: z.string(),
+        key: z.string(),
+        value: z.string(),
+    }),
+    z.object({
+        op: z.literal('add'),
+        key: z.string(),
+        translations: z.record(z.string(), z.string()),
+    }),
+    z.object({
+        op: z.literal('delete'),
+        key: z.string(),
+    }),
+    z.object({
+        op: z.literal('rename'),
+        oldKey: z.string(),
+        newKey: z.string(),
+    }),
+    z.object({
+        op: z.literal('move'),
+        oldKey: z.string(),
+        newKey: z.string(),
+    }),
+]);
+
+server.registerTool(
+    'batch',
+    {
+        description: `Apply multiple translation mutations in a single call. Each affected locale file is written exactly once, regardless of how many ops touch it. Prefer this over repeated set/add/delete/rename/move calls when making bulk changes — it minimizes file-watcher churn (Next.js dev, etc.) and is atomic per-file: if any op fails, no files are written. Always include the base locale "${baseLocale}" in add ops.`,
+        inputSchema: {
+            ops: z.array(batchOpSchema).describe('Ordered list of operations. Each op is one of: {op:"set", locale, key, value}, {op:"add", key, translations}, {op:"delete", key}, {op:"rename", oldKey, newKey}, {op:"move", oldKey, newKey}.'),
+        },
+    },
+    async ({ ops }) => {
+        try {
+            const result = batch(ops as BatchOp[], baseDir);
             return { content: [{ type: 'text', text: result }] };
         } catch (error) {
             return { content: [{ type: 'text', text: `Error: ${(error as Error).message}` }], isError: true };
