@@ -1,4 +1,4 @@
-# @trivle/i18n-tools-mcp
+# i18n-tools-mcp
 
 MCP server for querying and managing JSON translation files. Designed for AI agents (Claude Code, Cursor, etc.) to read and write i18n, i18next, react-i18next, and next-i18next translations directly through the Model Context Protocol.
 
@@ -8,7 +8,7 @@ Supports flat (`{locale}.json`) and namespaced (`{locale}/{namespace}.json`) dir
 
 Ask your AI agent:
 
-> Install the @trivle/i18n-tools-mcp MCP server. The translations directory is at ./messages and the base locale is nl.
+> Install the i18n-tools-mcp MCP server. The translations directory is at ./messages and the base locale is nl.
 
 Or add it manually to your MCP client config (e.g. `.claude/settings.json`):
 
@@ -17,7 +17,7 @@ Or add it manually to your MCP client config (e.g. `.claude/settings.json`):
   "mcpServers": {
     "i18n-tools": {
       "command": "npx",
-      "args": ["@trivle/i18n-tools-mcp", "./messages", "nl"]
+      "args": ["i18n-tools-mcp", "./messages", "nl"]
     }
   }
 }
