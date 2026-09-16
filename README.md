@@ -1,3 +1,5 @@
+![i18n-tools-mcp by Trivle — Translation files. Agent-ready.](./i18n-tools-mcp-og.png)
+
 # i18n-tools-mcp
 
 MCP server for querying and managing JSON translation files. Designed for AI agents (Claude Code, Cursor, etc.) to read and write i18n, i18next, react-i18next, and next-i18next translations directly through the Model Context Protocol.
