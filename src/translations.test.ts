@@ -673,3 +673,147 @@ describe('batch', () => {
         });
     });
 });
+
+describe('literal dotted keys', () => {
+    let dir: string;
+
+    afterEach(() => {
+        if (dir) {
+            rmSync(dir, { recursive: true });
+        }
+    });
+
+    it('queries a flat key that contains dots', () => {
+        dir = createFixture({
+            en: { 'auth.login.title': 'Log in' },
+            nl: { 'auth.login.title': 'Inloggen' },
+        });
+
+        expect(query('auth.login.title', dir)).toBe('en: Log in\nnl: Inloggen');
+    });
+
+    it('queries a group that only exists as a prefix of flat keys', () => {
+        dir = createFixture({
+            en: { 'datatable.columns': 'Columns', 'datatable.rows': 'Rows', other: 'Other' },
+        });
+
+        expect(query('datatable', dir)).toBe('en: {"columns":"Columns","rows":"Rows"}');
+    });
+
+    it('queries a dotted key inside a nested branch', () => {
+        dir = createFixture({
+            en: { settings: { 'mollie.title': 'Mollie' } },
+        });
+
+        expect(query('settings.mollie.title', dir)).toBe('en: Mollie');
+    });
+
+    it('overwrites an existing flat key in place', () => {
+        dir = createFixture({
+            nl: { 'auth.login.title': 'Oud', settings: { title: 'Instellingen' } },
+        });
+
+        set('nl', 'auth.login.title', 'Nieuw', dir);
+
+        expect(readLocale(dir, 'nl')).toEqual({ 'auth.login.title': 'Nieuw', settings: { title: 'Instellingen' } });
+    });
+
+    it('adds a new key as a flat key when the file uses dotted keys', () => {
+        dir = createFixture({
+            en: { 'auth.login.title': 'Log in', settings: { title: 'Settings' } },
+            nl: { 'auth.login.title': 'Inloggen', settings: { title: 'Instellingen' } },
+        });
+
+        add('bookings.empty', { nl: 'Geen boekingen', en: 'No bookings' }, dir);
+
+        expect(readLocale(dir, 'en')).toEqual({
+            'auth.login.title': 'Log in',
+            settings: { title: 'Settings' },
+            'bookings.empty': 'No bookings',
+        });
+    });
+
+    it('adds a new key into an existing nested branch of a mixed file', () => {
+        dir = createFixture({
+            en: { 'auth.login.title': 'Log in', settings: { title: 'Settings' } },
+        });
+
+        add('settings.profile.name', { en: 'Name' }, dir);
+
+        expect(readLocale(dir, 'en')).toEqual({
+            'auth.login.title': 'Log in',
+            settings: { title: 'Settings', profile: { name: 'Name' } },
+        });
+    });
+
+    it('deletes a flat key without leaving an empty parent', () => {
+        dir = createFixture({
+            en: { 'auth.login.title': 'Log in', 'auth.login.button': 'Go' },
+        });
+
+        expect(remove('auth.login.title', dir)).toBe('Deleted "auth.login.title" from 1 locale(s): en');
+        expect(readLocale(dir, 'en')).toEqual({ 'auth.login.button': 'Go' });
+    });
+
+    it('deletes every flat key under a prefix', () => {
+        dir = createFixture({
+            en: { 'datatable.columns': 'Columns', 'datatable.rows': 'Rows', other: 'Other' },
+        });
+
+        remove('datatable', dir);
+
+        expect(readLocale(dir, 'en')).toEqual({ other: 'Other' });
+    });
+
+    it('renames a flat key and keeps it flat', () => {
+        dir = createFixture({
+            en: { 'auth.login.title': 'Log in', other: 'Other' },
+        });
+
+        expect(rename('auth.login.title', 'auth.login.heading', dir))
+            .toBe('Renamed "auth.login.title" to "auth.login.heading" in 1 locale(s): en');
+        expect(readLocale(dir, 'en')).toEqual({ other: 'Other', 'auth.login.heading': 'Log in' });
+    });
+
+    it('moves a group of flat keys by prefix', () => {
+        dir = createFixture({
+            en: { 'datatable.columns': 'Columns', 'datatable.rows': 'Rows' },
+        });
+
+        move('datatable', 'table', dir);
+
+        expect(readLocale(dir, 'en')).toEqual({ 'table.columns': 'Columns', 'table.rows': 'Rows' });
+    });
+
+    it('reports no missing keys for flat files that match', () => {
+        dir = createFixture({
+            en: { 'auth.login.title': 'Log in' },
+            nl: { 'auth.login.title': 'Inloggen' },
+        });
+
+        expect(missing(dir)).toBe('All locales have all keys.');
+    });
+
+    it('searches flat dotted keys', () => {
+        dir = createFixture({
+            en: { 'auth.login.title': 'Log in' },
+        });
+
+        expect(search('log', 1, 100, dir)).toBe('Page 1/1 (1 results total)\nen.auth.login.title = "Log in"');
+    });
+
+    it('handles flat keys in batch', () => {
+        dir = createFixture({
+            en: { 'auth.login.title': 'Log in', 'auth.login.button': 'Go' },
+        });
+
+        batch([
+            { op: 'set', locale: 'en', key: 'auth.login.title', value: 'Sign in' },
+            { op: 'delete', key: 'auth.login.button' },
+            { op: 'add', key: 'auth.login.forgot', translations: { en: 'Forgot?' } },
+            { op: 'rename', oldKey: 'auth.login.title', newKey: 'auth.login.heading' },
+        ], dir);
+
+        expect(readLocale(dir, 'en')).toEqual({ 'auth.login.forgot': 'Forgot?', 'auth.login.heading': 'Sign in' });
+    });
+});

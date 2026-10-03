@@ -88,69 +88,217 @@ export function setIndent(spaces: number): void {
     jsonIndent = spaces;
 }
 
-function getNestedValue(obj: Record<string, unknown>, key: string): unknown {
-    const parts = key.split('.');
-    let current: unknown = obj;
+type JsonObject = Record<string, unknown>;
 
-    for (const part of parts) {
-        if (current == null || typeof current !== 'object') {
-            return undefined;
+interface Entry {
+    key: string;
+    path: string[];
+    value: unknown;
+}
+
+function isObject(value: unknown): value is JsonObject {
+    return value != null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function hasOwn(obj: JsonObject, key: string): boolean {
+    return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+/**
+ * Resolve a dot-notation key to the real chain of object keys. A single object key may itself
+ * contain dots (Laravel-style flat files such as `{"auth.login.title": "..."}`), so at every
+ * level the longest literal key wins, backtracking when a branch does not lead to the full key.
+ */
+function resolvePath(obj: JsonObject, key: string): string[] | undefined {
+    return resolveParts(obj, key.split('.'));
+}
+
+function resolveParts(obj: JsonObject, parts: string[]): string[] | undefined {
+    for (let i = parts.length; i > 0; i--) {
+        const segment = parts.slice(0, i).join('.');
+
+        if (!hasOwn(obj, segment)) {
+            continue;
         }
-        current = (current as Record<string, unknown>)[part];
+
+        if (i === parts.length) {
+            return [segment];
+        }
+
+        const child = obj[segment];
+        if (isObject(child)) {
+            const rest = resolveParts(child, parts.slice(i));
+            if (rest) {
+                return [segment, ...rest];
+            }
+        }
+    }
+
+    return undefined;
+}
+
+function parentOf(obj: JsonObject, path: string[]): JsonObject {
+    let current = obj;
+
+    for (const segment of path.slice(0, -1)) {
+        current = current[segment] as JsonObject;
     }
 
     return current;
 }
 
-function deleteNestedValue(obj: Record<string, unknown>, key: string): boolean {
-    const parts = key.split('.');
-    let current: Record<string, unknown> = obj;
+function collectEntries(obj: JsonObject, prefix: string = '', path: string[] = []): Entry[] {
+    const entries: Entry[] = [];
 
-    for (let i = 0; i < parts.length - 1; i++) {
-        const part = parts[i];
-        if (current[part] == null || typeof current[part] !== 'object') {
-            return false;
+    for (const [k, v] of Object.entries(obj)) {
+        const key = prefix ? `${prefix}.${k}` : k;
+        if (isObject(v)) {
+            entries.push(...collectEntries(v, key, [...path, k]));
+        } else {
+            entries.push({ key, path: [...path, k], value: v });
         }
-        current = current[part] as Record<string, unknown>;
     }
 
-    const lastPart = parts[parts.length - 1];
-    if (!(lastPart in current)) {
-        return false;
-    }
-
-    delete current[lastPart];
-    return true;
+    return entries;
 }
 
-function setNestedValue(obj: Record<string, unknown>, key: string, value: string): void {
-    const parts = key.split('.');
-    let current: Record<string, unknown> = obj;
+function collectKeys(obj: JsonObject): string[] {
+    return collectEntries(obj).map((entry) => entry.key);
+}
 
-    for (let i = 0; i < parts.length - 1; i++) {
-        const part = parts[i];
-        if (current[part] == null || typeof current[part] !== 'object') {
+/**
+ * Leaf entries whose full key equals `key` or lives under it. Unlike resolvePath this also
+ * finds groups that only exist as a shared prefix of flat keys (`datatable` for
+ * `"datatable.columns"` and `"datatable.rows"`).
+ */
+function matchingEntries(obj: JsonObject, key: string): Entry[] {
+    return collectEntries(obj).filter((entry) => entry.key === key || entry.key.startsWith(`${key}.`));
+}
+
+function getValue(obj: JsonObject, key: string): unknown {
+    const path = resolvePath(obj, key);
+
+    if (path) {
+        return parentOf(obj, path)[path[path.length - 1]];
+    }
+
+    const entries = matchingEntries(obj, key);
+    if (entries.length === 0) {
+        return undefined;
+    }
+
+    return Object.fromEntries(entries.map((entry) => [entry.key.slice(key.length + 1), entry.value]));
+}
+
+function deleteValue(obj: JsonObject, key: string): boolean {
+    let deleted = false;
+    const path = resolvePath(obj, key);
+
+    if (path) {
+        delete parentOf(obj, path)[path[path.length - 1]];
+        deleted = true;
+    }
+
+    for (const entry of matchingEntries(obj, key)) {
+        delete parentOf(obj, entry.path)[entry.path[entry.path.length - 1]];
+        deleted = true;
+    }
+
+    return deleted;
+}
+
+/**
+ * Set a value, overwriting an existing key wherever it lives. A new key descends into existing
+ * nested objects as far as possible; the remainder is written as one literal dotted key when
+ * that object already uses dotted keys (flat style), and as nested objects otherwise.
+ */
+function setValue(obj: JsonObject, key: string, value: unknown): void {
+    const path = resolvePath(obj, key);
+
+    if (path) {
+        parentOf(obj, path)[path[path.length - 1]] = value;
+        return;
+    }
+
+    let current = obj;
+    let parts = key.split('.');
+
+    descend: while (parts.length > 1) {
+        for (let i = parts.length - 1; i > 0; i--) {
+            const segment = parts.slice(0, i).join('.');
+            const child = current[segment];
+            if (hasOwn(current, segment) && isObject(child)) {
+                current = child;
+                parts = parts.slice(i);
+                continue descend;
+            }
+        }
+        break;
+    }
+
+    if (Object.keys(current).some((k) => k.includes('.'))) {
+        current[parts.join('.')] = value;
+        return;
+    }
+
+    for (const part of parts.slice(0, -1)) {
+        if (!isObject(current[part])) {
             current[part] = {};
         }
-        current = current[part] as Record<string, unknown>;
+        current = current[part] as JsonObject;
     }
 
     current[parts[parts.length - 1]] = value;
 }
 
-function collectKeys(obj: Record<string, unknown>, prefix: string = ''): string[] {
-    const keys: string[] = [];
+function valueAt(obj: JsonObject, path: string[]): unknown {
+    let current: unknown = obj;
 
-    for (const [k, v] of Object.entries(obj)) {
-        const fk = prefix ? `${prefix}.${k}` : k;
-        if (v != null && typeof v === 'object' && !Array.isArray(v)) {
-            keys.push(...collectKeys(v as Record<string, unknown>, fk));
-        } else {
-            keys.push(fk);
+    for (const segment of path) {
+        if (!isObject(current) || !hasOwn(current, segment)) {
+            return undefined;
+        }
+        current = current[segment];
+    }
+
+    return current;
+}
+
+/**
+ * Move every leaf under `oldKey` to `newKey`. New keys are written before the old ones are
+ * removed, so setValue still sees the file's key style (a flat file emptied first would look
+ * nested). Afterwards the old node is dropped if it is an object that is now empty.
+ */
+function renameValue(obj: JsonObject, oldKey: string, newKey: string): boolean {
+    const entries = matchingEntries(obj, oldKey);
+
+    if (entries.length === 0) {
+        return false;
+    }
+
+    const oldPath = resolvePath(obj, oldKey);
+    const written = new Set<string>();
+
+    for (const entry of entries) {
+        const target = newKey + entry.key.slice(oldKey.length);
+        setValue(obj, target, entry.value);
+        written.add(JSON.stringify(resolvePath(obj, target)));
+    }
+
+    for (const entry of entries) {
+        if (!written.has(JSON.stringify(entry.path)) && valueAt(obj, entry.path) !== undefined && !isObject(valueAt(obj, entry.path))) {
+            delete parentOf(obj, entry.path)[entry.path[entry.path.length - 1]];
         }
     }
 
-    return keys;
+    if (oldPath) {
+        const node = valueAt(obj, oldPath);
+        if (isObject(node) && Object.keys(node).length === 0) {
+            delete parentOf(obj, oldPath)[oldPath[oldPath.length - 1]];
+        }
+    }
+
+    return true;
 }
 
 function filterFiles(files: LocaleFile[], namespace?: string): LocaleFile[] {
@@ -178,7 +326,7 @@ export function query(key: string, dir?: string): string {
 
     for (const file of filesToSearch) {
         const data = readJson(file.path);
-        const value = getNestedValue(data, dotKey);
+        const value = getValue(data, dotKey);
 
         if (value !== undefined) {
             const label = !namespace && file.namespace
@@ -217,7 +365,7 @@ export function set(locale: string, key: string, value: string, dir?: string): s
     }
 
     const data = readJson(localeFile.path);
-    setNestedValue(data, dotKey, sanitize(value));
+    setValue(data, dotKey, sanitize(value));
     writeJson(localeFile.path, data);
 
     return `Set ${locale}.${key} = "${value}"`;
@@ -232,7 +380,7 @@ export function remove(key: string, dir?: string): string {
 
     for (const file of filesToSearch) {
         const data = readJson(file.path);
-        if (deleteNestedValue(data, dotKey)) {
+        if (deleteValue(data, dotKey)) {
             writeJson(file.path, data);
             const label = !namespace && file.namespace
                 ? `${file.locale} (${file.namespace})`
@@ -270,7 +418,7 @@ export function add(key: string, translations: Record<string, string>, dir?: str
         }
 
         const data = readJson(localeFile.path);
-        setNestedValue(data, dotKey, sanitize(value));
+        setValue(data, dotKey, sanitize(value));
         writeJson(localeFile.path, data);
         updated.push(locale);
     }
@@ -298,22 +446,9 @@ export function rename(oldKey: string, newKey: string, dir?: string): string {
 
     for (const file of filesToSearch) {
         const data = readJson(file.path);
-        const value = getNestedValue(data, oldDotKey);
 
-        if (value === undefined) {
+        if (!renameValue(data, oldDotKey, newDotKey)) {
             continue;
-        }
-
-        deleteNestedValue(data, oldDotKey);
-
-        if (typeof value === 'object' && value !== null) {
-            const subKeys = collectKeys(value as Record<string, unknown>);
-            for (const subKey of subKeys) {
-                const subValue = getNestedValue(value as Record<string, unknown>, subKey);
-                setNestedValue(data, `${newDotKey}.${subKey}`, subValue as string);
-            }
-        } else {
-            setNestedValue(data, newDotKey, value as string);
         }
 
         writeJson(file.path, data);
@@ -408,10 +543,8 @@ export function search(value: string, page: number = 1, pageSize: number = 100, 
 
     for (const file of localeFiles) {
         const data = readJson(file.path);
-        const keys = collectKeys(data);
 
-        for (const key of keys) {
-            const v = getNestedValue(data, key);
+        for (const { key, value: v } of collectEntries(data)) {
             if (typeof v === 'string' && v.toLowerCase().includes(lowerValue)) {
                 const fk = fullKey(file, key);
                 results.push(`${file.locale}.${fk} = "${v}"`);
@@ -477,7 +610,7 @@ export function batch(ops: BatchOp[], dir?: string): string {
                         const target = namespace ? `${op.locale}/${namespace}` : op.locale;
                         throw new Error(`Locale "${target}" not found in ${resolvedDir}`);
                     }
-                    setNestedValue(load(file), dotKey, sanitize(op.value));
+                    setValue(load(file), dotKey, sanitize(op.value));
                     dirty.add(file.path);
                     summary.push(`set ${op.locale}.${op.key}`);
                     break;
@@ -496,7 +629,7 @@ export function batch(ops: BatchOp[], dir?: string): string {
                             skipped.push(locale);
                             continue;
                         }
-                        setNestedValue(load(file), dotKey, sanitize(value));
+                        setValue(load(file), dotKey, sanitize(value));
                         dirty.add(file.path);
                         updated.push(locale);
                     }
@@ -514,7 +647,7 @@ export function batch(ops: BatchOp[], dir?: string): string {
                     const deleted: string[] = [];
                     for (const file of filesToSearch) {
                         const data = load(file);
-                        if (deleteNestedValue(data, dotKey)) {
+                        if (deleteValue(data, dotKey)) {
                             dirty.add(file.path);
                             deleted.push(file.locale);
                         }
@@ -532,21 +665,7 @@ export function batch(ops: BatchOp[], dir?: string): string {
                     const filesToSearch = filterFiles(localeFiles, oldNs);
                     const renamed: string[] = [];
                     for (const file of filesToSearch) {
-                        const data = load(file);
-                        const value = getNestedValue(data, oldDotKey);
-                        if (value === undefined) continue;
-
-                        deleteNestedValue(data, oldDotKey);
-
-                        if (typeof value === 'object' && value !== null) {
-                            const subKeys = collectKeys(value as Record<string, unknown>);
-                            for (const subKey of subKeys) {
-                                const subValue = getNestedValue(value as Record<string, unknown>, subKey);
-                                setNestedValue(data, `${newDotKey}.${subKey}`, subValue as string);
-                            }
-                        } else {
-                            setNestedValue(data, newDotKey, value as string);
-                        }
+                        if (!renameValue(load(file), oldDotKey, newDotKey)) continue;
 
                         dirty.add(file.path);
                         renamed.push(file.locale);

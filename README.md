@@ -57,6 +57,14 @@ messages/
 
 In namespace mode, prefix keys with the namespace: `common:Users.name`. Read operations (`query`, `list`, `search`, `missing`) work across all namespaces when no prefix is given. Write operations (`set`, `add`) require a namespace prefix.
 
+## Keys containing dots
+
+Keys may be nested objects, literal keys containing dots (Laravel-style `{"auth.login.title": "..."}`), or a mix of both. A dot-notation key is resolved against what is actually in the file, with the longest literal key winning at each level, so `auth.login.title` finds both `{"auth": {"login": {"title": ...}}}` and `{"auth.login.title": ...}`.
+
+- **Existing keys** are updated in place, in whichever form they already have.
+- **New keys** descend into existing nested objects as far as possible. The remainder is written as one literal dotted key when that object already contains dotted keys, and as nested objects otherwise.
+- **Prefixes** of flat keys act as groups: `query`, `delete`, `rename` and `move` on `datatable` cover `datatable.columns` and `datatable.rows`.
+
 ## Tools
 
 ### `query`
