@@ -33,7 +33,7 @@ Arguments:
 
 ## Directory structures
 
-Both flat and namespaced layouts are auto-detected.
+Both flat and namespaced layouts are auto-detected. JSON files directly in the directory make it flat; other folders next to them (such as Laravel's `resources/lang/vendor`) are then ignored.
 
 **Flat** — one JSON file per locale:
 

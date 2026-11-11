@@ -817,3 +817,28 @@ describe('literal dotted keys', () => {
         expect(readLocale(dir, 'en')).toEqual({ 'auth.login.forgot': 'Forgot?', 'auth.login.heading': 'Sign in' });
     });
 });
+
+describe('flat files next to subdirectories', () => {
+    let dir: string;
+
+    afterEach(() => {
+        if (dir) {
+            rmSync(dir, { recursive: true });
+        }
+    });
+
+    it('reads the flat locale files when the directory also holds a folder without JSON', () => {
+        // Laravel's resources/lang: en.json, nl.json and vendor/<package>/<locale>/*.php
+        dir = createFixture({
+            en: { 'calendar.title': 'Planboard' },
+            nl: { 'calendar.title': 'Planbord' },
+        });
+        mkdirSync(join(dir, 'vendor', 'larecipe', 'nl'), { recursive: true });
+        writeFileSync(join(dir, 'vendor', 'larecipe', 'nl', 'ui.php'), '<?php return [];\n');
+
+        expect(query('calendar.title', dir)).toBe('en: Planboard\nnl: Planbord');
+        expect(add('calendar.save', { en: 'Save', nl: 'Opslaan' }, dir)).toBe('Added "calendar.save" to 2 locale(s): en, nl');
+        expect(readLocale(dir, 'nl')).toEqual({ 'calendar.title': 'Planbord', 'calendar.save': 'Opslaan' });
+        expect(missing(dir)).toBe('All locales have all keys.');
+    });
+});

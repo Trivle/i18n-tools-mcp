@@ -18,38 +18,42 @@ function sanitize(value: string): string {
         .replace(/[\u2018\u2019\u201A\u201B\u2032\u2035]/g, "'");
 }
 
+/**
+ * JSON files directly in the directory are the locales (`en.json`); only without them do
+ * subdirectories hold namespaced locales (`en/common.json`). Flat files win so that an
+ * unrelated folder next to them, such as Laravel's `resources/lang/vendor`, is ignored.
+ */
 function discoverLocaleFiles(dir: string): LocaleFile[] {
     const resolvedDir = resolve(dir);
     const entries = readdirSync(resolvedDir, { withFileTypes: true });
-    const subdirs = entries.filter((e) => e.isDirectory()).sort((a, b) => a.name.localeCompare(b.name));
-
-    if (subdirs.length > 0) {
-        const files: LocaleFile[] = [];
-
-        for (const subdir of subdirs) {
-            const localePath = join(resolvedDir, subdir.name);
-            const jsonFiles = readdirSync(localePath).filter((f) => f.endsWith('.json')).sort();
-
-            for (const f of jsonFiles) {
-                files.push({
-                    locale: subdir.name,
-                    namespace: basename(f, '.json'),
-                    path: join(localePath, f),
-                });
-            }
-        }
-
-        return files;
-    }
-
     const jsonFiles = entries
         .filter((e) => e.isFile() && e.name.endsWith('.json'))
         .sort((a, b) => a.name.localeCompare(b.name));
 
-    return jsonFiles.map((f) => ({
-        locale: basename(f.name, '.json'),
-        path: join(resolvedDir, f.name),
-    }));
+    if (jsonFiles.length > 0) {
+        return jsonFiles.map((f) => ({
+            locale: basename(f.name, '.json'),
+            path: join(resolvedDir, f.name),
+        }));
+    }
+
+    const subdirs = entries.filter((e) => e.isDirectory()).sort((a, b) => a.name.localeCompare(b.name));
+    const files: LocaleFile[] = [];
+
+    for (const subdir of subdirs) {
+        const localePath = join(resolvedDir, subdir.name);
+        const namespaceFiles = readdirSync(localePath).filter((f) => f.endsWith('.json')).sort();
+
+        for (const f of namespaceFiles) {
+            files.push({
+                locale: subdir.name,
+                namespace: basename(f, '.json'),
+                path: join(localePath, f),
+            });
+        }
+    }
+
+    return files;
 }
 
 function parseKey(key: string): { namespace?: string; dotKey: string } {
