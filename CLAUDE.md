@@ -10,6 +10,8 @@ Supports two directory layouts (auto-detected):
 - **Flat**: `{locale}.json` files in a single directory
 - **Namespaced**: `{locale}/{namespace}.json` (i18next-style), keys prefixed with `namespace:`
 
+JSON files directly in the directory make it flat; other folders next to them (Laravel's `resources/lang/vendor`) are then ignored.
+
 ## Commands
 
 ```bash
